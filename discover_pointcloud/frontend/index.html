@@ -17,23 +17,6 @@
         </header>
 
         <section class="panel-section">
-          <h2>样例</h2>
-          <div class="field-grid">
-            <label class="field">
-              <span>内置 DiscoverStereo 样例</span>
-              <select id="sampleSelect"></select>
-            </label>
-            <button id="loadSampleButton" type="button">加载样例</button>
-          </div>
-          <p class="hint">
-            当前内置样例来自 representative 5 的 `GT / 640x352 / 1280x1088` 点云抽取结果。
-            桌面版无需本地 HTTP 服务；如果用浏览器模式，推荐在
-            <code>/Users/wujinlong/Desktop/Discover</code> 下执行
-            <code>python3 -m http.server 8000</code>。
-          </p>
-        </section>
-
-        <section class="panel-section">
           <h2>像素对比（暂时关闭）</h2>
           <div id="selectionPanel" class="selection-panel">
             <div class="summary-empty">点选像素对比已暂时关闭，避免大点云点击后卡死。</div>

@@ -116,27 +116,6 @@ u = fx * x / z + cx
 v = fy * y / z + cy
 ```
 
-## 内置样例
-
-页面里的内置样例来自 DiscoverStereo representative 5：
-
-- 源 HTML：`../bucket_pointcloud_compare_representative5_lite/val_*/pointcloud_bucket_compare.html`
-- 抽取后的 JSON：`discover_samples/`
-- 包内静态资源镜像：`discover_pointcloud/frontend/discover_samples/`
-- 清单：`discover_samples/manifest.json`
-
-每个代表样例提供两种内置对比：
-
-- `GT vs 640x352 best -> fullres`
-- `GT vs 1280x1088 best`
-
-如需重新生成这些内置样例：
-
-```bash
-cd ..
-python3 pointcloud_compare_tool/scripts/generate_discover_samples.py
-```
-
 ## 前端资产同步
 
 canonical 前端源码保留在工具根目录：
@@ -144,9 +123,8 @@ canonical 前端源码保留在工具根目录：
 - `index.html`
 - `app.js`
 - `styles.css`
-- `discover_samples/`
 
-Python 包内的 `discover_pointcloud/frontend/` 是发布用静态资源镜像。修改根目录前端或重新生成样例后，运行：
+Python 包内的 `discover_pointcloud/frontend/` 是发布用静态资源镜像。修改根目录前端后，运行：
 
 ```bash
 python3 scripts/sync_python_frontend_assets.py
@@ -177,7 +155,6 @@ python -m py_compile \
   discover_pointcloud/__main__.py \
   discover_pointcloud/app.py \
   discover_pointcloud/server.py \
-  scripts/generate_discover_samples.py \
   scripts/sync_python_frontend_assets.py \
   scripts/smoke_check.py
 ```

@@ -42,7 +42,5 @@ discover_pointcloud = [
   "frontend/app.js",
   "frontend/styles.css",
   "frontend/vendor/*.js",
-  "frontend/vendor/README.md",
-  "frontend/discover_samples/manifest.json",
-  "frontend/discover_samples/*/*.json"
+  "frontend/vendor/README.md"
 ]

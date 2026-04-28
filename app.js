@@ -22,14 +22,12 @@ const DEFAULT_DISCOVER_CAMERA = {
   baseline: 0.054885186954,
 };
 
-const SAMPLE_MANIFEST_URL = "./discover_samples/manifest.json";
 const MARKER_SIZE_SCALE = 0.6;
 const POINT_SELECTION_ENABLED = false;
 const PICK_MARKER_SIZE = 9;
 const PIXEL_MATCH_TOLERANCE = 2.0;
 const LARGE_FILE_WARN_BYTES = 80 * 1024 * 1024;
 const TEXT_DECODER = new TextDecoder("utf-8");
-const isDesktopApp = Boolean(window.pointCloudDesktop);
 
 const state = {
   clouds: {
@@ -53,8 +51,6 @@ const state = {
   bucketVisibility: Object.fromEntries(
     [...DISP_BUCKETS, OVERFLOW_BUCKET].map((bucket) => [bucket.key, bucket.key !== OVERFLOW_BUCKET.key])
   ),
-  samplePresets: [],
-  sampleCamera: { ...DEFAULT_DISCOVER_CAMERA },
   selection: null,
   selectionTraceCount: 0,
   selectionOverlayPromise: Promise.resolve(),
@@ -69,8 +65,6 @@ const elements = {
   messageBar: document.getElementById("messageBar"),
   summaryPanel: document.getElementById("summaryPanel"),
   selectionPanel: document.getElementById("selectionPanel"),
-  sampleSelect: document.getElementById("sampleSelect"),
-  loadSampleButton: document.getElementById("loadSampleButton"),
   leftFileInput: document.getElementById("leftFileInput"),
   rightFileInput: document.getElementById("rightFileInput"),
   leftLabelInput: document.getElementById("leftLabelInput"),
@@ -105,58 +99,10 @@ function initialize() {
   elements.cxInput.value = String(DEFAULT_DISCOVER_CAMERA.cx);
   elements.cyInput.value = String(DEFAULT_DISCOVER_CAMERA.cy);
   elements.baselineInput.value = String(DEFAULT_DISCOVER_CAMERA.baseline);
-  populateSampleOptions([]);
   buildBucketControls();
   bindEvents();
   updateTheme(state.theme);
   renderEmptyPlot();
-  void loadBuiltInSamples();
-}
-
-function populateSampleOptions(samples) {
-  elements.sampleSelect.innerHTML = "";
-
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = samples.length ? "选择内置样例" : "内置样例加载中";
-  elements.sampleSelect.appendChild(placeholder);
-
-  samples.forEach((sample) => {
-    const option = document.createElement("option");
-    option.value = sample.id;
-    option.textContent = sample.title;
-    elements.sampleSelect.appendChild(option);
-  });
-}
-
-async function loadBuiltInSamples() {
-  try {
-    const manifest = await readJsonAsset(SAMPLE_MANIFEST_URL);
-    state.samplePresets = manifest.samples || [];
-
-    if (manifest.camera?.fx && manifest.camera?.baseline) {
-      state.sampleCamera = {
-        fx: Number(manifest.camera.fx),
-        fy: Number(manifest.camera.fy ?? manifest.camera.fx),
-        cx: Number(manifest.camera.cx ?? DEFAULT_DISCOVER_CAMERA.cx),
-        cy: Number(manifest.camera.cy ?? DEFAULT_DISCOVER_CAMERA.cy),
-        baseline: Number(manifest.camera.baseline),
-      };
-      setCameraInputs(state.sampleCamera);
-    }
-
-    populateSampleOptions(state.samplePresets);
-    if (state.samplePresets.length) {
-      elements.sampleSelect.value = state.samplePresets[0].id;
-      await loadSample(state.samplePresets[0]);
-    } else {
-      setMessage("未找到 DiscoverStereo 内置样例。", "warn");
-    }
-  } catch (error) {
-    console.error(error);
-    setMessage(`内置样例清单加载失败：${error.message}`, "warn");
-    populateSampleOptions([]);
-  }
 }
 
 function buildBucketControls() {
@@ -290,15 +236,6 @@ function bindEvents() {
     await exportScreenshot();
   });
 
-  elements.loadSampleButton.addEventListener("click", async () => {
-    const sample = state.samplePresets.find((item) => item.id === elements.sampleSelect.value);
-    if (!sample) {
-      setMessage("请先选择一个样例。", "warn");
-      return;
-    }
-    await loadSample(sample);
-  });
-
   bindDropZone(elements.leftDropZone, "left");
   bindDropZone(elements.rightDropZone, "right");
 }
@@ -349,87 +286,6 @@ function getCameraParams() {
   const cy = Number(elements.cyInput.value);
   const baseline = Number(elements.baselineInput.value);
   return { fx, fy, cx, cy, baseline };
-}
-
-function setCameraInputs(camera) {
-  elements.fxInput.value = String(camera.fx);
-  elements.fyInput.value = String(camera.fy ?? camera.fx);
-  elements.cxInput.value = String(camera.cx ?? DEFAULT_DISCOVER_CAMERA.cx);
-  elements.cyInput.value = String(camera.cy ?? DEFAULT_DISCOVER_CAMERA.cy);
-  elements.baselineInput.value = String(camera.baseline);
-}
-
-async function loadSample(sample) {
-  setCameraInputs(state.sampleCamera);
-  elements.leftLabelInput.value = sample.left_label;
-  elements.rightLabelInput.value = sample.right_label;
-  state.labels.left = sample.left_label;
-  state.labels.right = sample.right_label;
-  state.selection = null;
-  setMessage(`加载样例 ${sample.sample_id} 中。`, "info");
-
-  try {
-    const [leftText, rightText] = await Promise.all([
-      readTextAsset(sample.left_url),
-      readTextAsset(sample.right_url),
-    ]);
-
-    state.clouds.left = buildCloudState({
-      name: `${sample.id}_left.json`,
-      source: { text: leftText },
-      sourceType: "sample",
-      side: "left",
-    });
-    state.clouds.right = buildCloudState({
-      name: `${sample.id}_right.json`,
-      source: { text: rightText },
-      sourceType: "sample",
-      side: "right",
-    });
-    updateStatus("left");
-    updateStatus("right");
-    renderIfReady();
-    setMessage(`样例 ${sample.title} 已加载。`, "ok");
-  } catch (error) {
-    console.error(error);
-    setMessage(`样例加载失败：${error.message}`, "error");
-  }
-}
-
-async function fetchJson(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`${url} 返回 ${response.status}`);
-  }
-  return await response.json();
-}
-
-async function fetchText(url) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`${url} 返回 ${response.status}`);
-  }
-  return await response.text();
-}
-
-function normalizeAssetPath(assetPath) {
-  return assetPath.replace(/^\.\//, "");
-}
-
-async function readJsonAsset(assetPath) {
-  const normalizedPath = normalizeAssetPath(assetPath);
-  if (isDesktopApp) {
-    return await window.pointCloudDesktop.readJson(normalizedPath);
-  }
-  return await fetchJson(normalizedPath);
-}
-
-async function readTextAsset(assetPath) {
-  const normalizedPath = normalizeAssetPath(assetPath);
-  if (isDesktopApp) {
-    return await window.pointCloudDesktop.readText(normalizedPath);
-  }
-  return await fetchText(normalizedPath);
 }
 
 async function loadCloudFromLocalFile(file, side) {
@@ -541,9 +397,9 @@ function parseAsciiPly(text, maxPoints = Infinity) {
   const sourceIndex = [];
   const uField = firstExistingProperty(propertyIndex, ["u", "pixel_x", "px", "col", "column"]);
   const vField = firstExistingProperty(propertyIndex, ["v", "pixel_y", "py", "row", "line"]);
-  const sampleStep = computeSampleStep(vertexCount, maxPoints);
+  const displayStride = computeDisplayStride(vertexCount, maxPoints);
 
-  for (let index = 0; index < vertexCount; index += sampleStep) {
+  for (let index = 0; index < vertexCount; index += displayStride) {
     const line = lines[headerEnd + 1 + index];
     if (!line) {
       continue;
@@ -558,7 +414,7 @@ function parseAsciiPly(text, maxPoints = Infinity) {
     sourceIndex.push(index);
   }
 
-  return { x, y, z, disp, u, v, sourceIndex, rawCount: vertexCount, sampleStep };
+  return { x, y, z, disp, u, v, sourceIndex, rawCount: vertexCount, displayStride };
 }
 
 function parsePlyBuffer(arrayBuffer, maxPoints = Infinity) {
@@ -686,8 +542,8 @@ function parseBinaryLittleEndianPly(arrayBuffer, dataStart, header, maxPoints = 
   const uField = firstExistingProperty(header.propertyIndex, ["u", "pixel_x", "px", "col", "column"]);
   const vField = firstExistingProperty(header.propertyIndex, ["v", "pixel_y", "py", "row", "line"]);
 
-  const sampleStep = computeSampleStep(header.vertexCount, maxPoints);
-  for (let vertexIndex = 0; vertexIndex < header.vertexCount; vertexIndex += sampleStep) {
+  const displayStride = computeDisplayStride(header.vertexCount, maxPoints);
+  for (let vertexIndex = 0; vertexIndex < header.vertexCount; vertexIndex += displayStride) {
     let offset = dataStart + vertexIndex * vertexStride;
     const values = [];
     for (const reader of propertyReaders) {
@@ -704,14 +560,14 @@ function parseBinaryLittleEndianPly(arrayBuffer, dataStart, header, maxPoints = 
     sourceIndex.push(vertexIndex);
   }
 
-  return { x, y, z, disp, u, v, sourceIndex, rawCount: header.vertexCount, sampleStep };
+  return { x, y, z, disp, u, v, sourceIndex, rawCount: header.vertexCount, displayStride };
 }
 
 function firstExistingProperty(propertyIndex, candidates) {
   return candidates.find((name) => propertyIndex[name] !== undefined) || null;
 }
 
-function computeSampleStep(rawCount, maxPoints) {
+function computeDisplayStride(rawCount, maxPoints) {
   const limit = Number(maxPoints);
   if (!Number.isFinite(limit) || limit <= 0 || rawCount <= limit) {
     return 1;
@@ -799,7 +655,7 @@ function parseJsonCloud(text) {
 function normalizeCloud(parsed, { fx, fy, cx, cy, baseline, maxPoints }) {
   const pointCount = parsed.x.length;
   const rawCount = parsed.rawCount ?? pointCount;
-  const sourceSampleStep = parsed.sampleStep ?? 1;
+  const sourceDisplayStride = parsed.displayStride ?? 1;
   const step = pointCount > maxPoints ? Math.ceil(pointCount / maxPoints) : 1;
   const bucketed = Object.fromEntries(
     [...DISP_BUCKETS, OVERFLOW_BUCKET].map((bucket) => [
@@ -905,7 +761,7 @@ function normalizeCloud(parsed, { fx, fy, cx, cy, baseline, maxPoints }) {
   return {
     dispMode,
     rawCount,
-    sampleStep: sourceSampleStep * step,
+    displayStride: sourceDisplayStride * step,
     bucketed,
     points,
     pixelLookup,
@@ -940,7 +796,7 @@ function updateStatus(side) {
       : "文件+回推";
   updateSideStatus(
     side,
-    `${cloud.name} | ${cloud.pointCount}/${cloud.rawCount} 点${cloud.sampleStep > 1 ? ` | ${cloud.sampleStep}x 抽样` : ""} | ${modeLabel}`
+    `${cloud.name} | ${cloud.pointCount}/${cloud.rawCount} 点${cloud.displayStride > 1 ? ` | ${cloud.displayStride}x 抽样` : ""} | ${modeLabel}`
   );
 }
 
@@ -1011,7 +867,7 @@ function buildCloudState({ name, source, text, sourceType, side }) {
     sourceType,
     name,
     rawCount: normalized.rawCount,
-    sampleStep: normalized.sampleStep,
+    displayStride: normalized.displayStride,
     dispMode: normalized.dispMode,
     bucketed: normalized.bucketed,
     points: normalized.points,
@@ -1362,7 +1218,7 @@ function updateSummary() {
         <dl>
           <dt>文件</dt><dd>${escapeHtml(cloud.name)}</dd>
           <dt>点数</dt><dd>${cloud.pointCount} / ${cloud.rawCount}</dd>
-          <dt>采样</dt><dd>${cloud.sampleStep > 1 ? `每 ${cloud.sampleStep} 点取 1 点` : "全量显示"}</dd>
+          <dt>采样</dt><dd>${cloud.displayStride > 1 ? `每 ${cloud.displayStride} 点取 1 点` : "全量显示"}</dd>
           <dt>像素索引</dt><dd>${cloud.pixelLookup.size} 个像素</dd>
           <dt>视差来源</dt><dd>${modeLabel}</dd>
           <dt>深度均值</dt><dd>${formatNumber(cloud.depthStats.mean)} m</dd>

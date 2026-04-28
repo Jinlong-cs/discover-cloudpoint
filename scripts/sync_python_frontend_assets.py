@@ -11,14 +11,13 @@ SOURCE_FILES = [
     ROOT / "app.js",
     ROOT / "styles.css",
 ]
-SOURCE_SAMPLES = ROOT / "discover_samples"
 SOURCE_VENDOR = ROOT / "vendor"
 
 
 def main() -> None:
     missing_sources = [
         str(path)
-        for path in [*SOURCE_FILES, SOURCE_SAMPLES, SOURCE_VENDOR]
+        for path in [*SOURCE_FILES, SOURCE_VENDOR]
         if not path.exists()
     ]
     if missing_sources:
@@ -34,10 +33,6 @@ def main() -> None:
         shutil.rmtree(target_vendor)
     shutil.copytree(SOURCE_VENDOR, target_vendor)
 
-    target_samples = PACKAGE_FRONTEND / "discover_samples"
-    if target_samples.exists():
-        shutil.rmtree(target_samples)
-    shutil.copytree(SOURCE_SAMPLES, target_samples)
     print(f"synchronized canonical frontend assets into {PACKAGE_FRONTEND}")
 
 

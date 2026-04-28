@@ -4,7 +4,6 @@ from contextlib import ExitStack
 from importlib.resources import as_file
 from pathlib import Path
 from urllib.request import urlopen
-import json
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,16 +27,10 @@ def main() -> None:
             asset_root / "styles.css",
             asset_root / "vendor" / "plotly-2.35.2.min.js",
             asset_root / "vendor" / "html2canvas-1.4.1.min.js",
-            asset_root / "discover_samples" / "manifest.json",
         ]
         missing = [str(path) for path in required_files if not path.exists()]
         if missing:
             raise FileNotFoundError(f"missing packaged assets: {missing}")
-
-        manifest = json.loads((asset_root / "discover_samples" / "manifest.json").read_text())
-        samples = manifest.get("samples", [])
-        if not samples:
-            raise ValueError("discover sample manifest has no samples")
 
         server_handle = None
         try:
@@ -46,19 +39,14 @@ def main() -> None:
             plotly_text = fetch_text(
                 f"{server_handle.base_url}/vendor/plotly-2.35.2.min.js"
             )
-            manifest_text = fetch_text(
-                f"{server_handle.base_url}/discover_samples/manifest.json"
-            )
             if "Point Cloud Compare" not in index_html:
                 raise ValueError("index.html did not look like the point cloud UI")
             if "Plotly" not in plotly_text:
                 raise ValueError("served Plotly vendor bundle did not look valid")
-            if not json.loads(manifest_text).get("samples"):
-                raise ValueError("served manifest has no samples")
         finally:
             stop_static_server(server_handle)
 
-    print(f"smoke check passed: {len(samples)} built-in compare presets")
+    print("smoke check passed: packaged frontend assets served correctly")
 
 
 if __name__ == "__main__":
