@@ -55,6 +55,9 @@ const state = {
   samplePresets: [],
   sampleCamera: { ...DEFAULT_DISCOVER_CAMERA },
   selection: null,
+  selectionTraceCount: 0,
+  selectionOverlayPromise: Promise.resolve(),
+  selectionOverlayToken: 0,
   syncLocked: false,
   plotSyncHandler: null,
   plotClickHandler: null,
@@ -1045,6 +1048,7 @@ function renderEmptyPlot() {
     displaylogo: false,
     modeBarButtonsToRemove: ["select2d", "lasso2d"],
   }).then(() => {
+    state.selectionTraceCount = 0;
     bindPlotSync();
   });
 }
@@ -1108,8 +1112,6 @@ function renderPlot() {
   });
 
   traces.push(...buildPickTraces(clouds));
-  traces.push(...buildSelectionTraces());
-
   const layout = buildLayout({
     sceneBounds: mergeBounds([state.clouds.left.bounds, state.clouds.right.bounds]),
   });
@@ -1119,7 +1121,9 @@ function renderPlot() {
     displaylogo: false,
     modeBarButtonsToRemove: ["select2d", "lasso2d"],
   }).then(() => {
+    state.selectionTraceCount = 0;
     bindPlotSync();
+    return updateSelectionOverlay();
   });
 }
 
@@ -1247,9 +1251,7 @@ function mergeBounds(boundsList) {
 }
 
 function bindPlotSync() {
-  if (state.plotSyncHandler && elements.plot.removeListener) {
-    elements.plot.removeListener("plotly_relayout", state.plotSyncHandler);
-  }
+  removePlotListener("plotly_relayout", state.plotSyncHandler);
 
   state.plotSyncHandler = (eventData) => {
     if (state.syncLocked) {
@@ -1272,9 +1274,7 @@ function bindPlotSync() {
 
   elements.plot.on?.("plotly_relayout", state.plotSyncHandler);
 
-  if (state.plotClickHandler && elements.plot.removeListener) {
-    elements.plot.removeListener("plotly_click", state.plotClickHandler);
-  }
+  removePlotListener("plotly_click", state.plotClickHandler);
   state.plotClickHandler = (eventData) => {
     const pointData = eventData?.points?.[0];
     if (!pointData || !["cloud", "pick"].includes(pointData.data?.meta?.kind)) {
@@ -1283,6 +1283,17 @@ function bindPlotSync() {
     selectPoint(pointData);
   };
   elements.plot.on?.("plotly_click", state.plotClickHandler);
+}
+
+function removePlotListener(eventName, handler) {
+  if (!handler) {
+    return;
+  }
+  if (typeof elements.plot.removeListener === "function") {
+    elements.plot.removeListener(eventName, handler);
+  } else if (typeof elements.plot.removeAllListeners === "function") {
+    elements.plot.removeAllListeners(eventName);
+  }
 }
 
 function updateMarkerStyle() {
@@ -1375,13 +1386,55 @@ function selectPoint(pointData) {
     pixelDistance: match?.pixelDistance ?? Number.NaN,
     matchType: match?.matchType || null,
   };
-  renderIfReady();
+  updateSelectionPanel();
+  void updateSelectionOverlay();
   setMessage(
     match
       ? `已标记${match.matchType}，像素距离 ${formatNumber(match.pixelDistance)} px。`
       : "已标记当前点，但另一侧没有可匹配像素。",
     match ? "ok" : "warn"
   );
+}
+
+function updateSelectionOverlay() {
+  const token = state.selectionOverlayToken + 1;
+  state.selectionOverlayToken = token;
+  state.selectionOverlayPromise = state.selectionOverlayPromise
+    .catch(() => undefined)
+    .then(async () => {
+      if (token !== state.selectionOverlayToken || !elements.plot.data) {
+        return;
+      }
+      await clearSelectionTraces();
+      if (token !== state.selectionOverlayToken) {
+        return;
+      }
+      const traces = buildSelectionTraces();
+      if (!traces.length) {
+        return;
+      }
+      await Plotly.addTraces(elements.plot, traces);
+      if (token === state.selectionOverlayToken) {
+        state.selectionTraceCount = traces.length;
+      }
+    })
+    .catch((error) => {
+      console.error(error);
+      setMessage(`高亮点更新失败：${error.message}`, "error");
+    });
+  return state.selectionOverlayPromise;
+}
+
+async function clearSelectionTraces() {
+  if (!state.selectionTraceCount || !elements.plot.data?.length) {
+    state.selectionTraceCount = 0;
+    return;
+  }
+  const traceCount = Math.min(state.selectionTraceCount, elements.plot.data.length);
+  const firstSelectionTrace = elements.plot.data.length - traceCount;
+  const indices = Array.from({ length: traceCount }, (_, index) => firstSelectionTrace + index);
+  state.selectionTraceCount = 0;
+  await Plotly.deleteTraces(elements.plot, indices);
 }
 
 function findCorrespondingPoint(sourcePoint, targetCloud) {
