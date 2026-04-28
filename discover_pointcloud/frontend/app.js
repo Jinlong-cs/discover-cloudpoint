@@ -1143,7 +1143,7 @@ function buildLayout({ sceneBounds }) {
     paper_bgcolor: theme.paper,
     plot_bgcolor: theme.paper,
     font: { color: theme.text },
-    clickmode: "event+select",
+    clickmode: "event",
     margin: { l: 0, r: 0, t: 70, b: 0 },
     legend: {
       bgcolor: theme.paper,
@@ -1518,6 +1518,18 @@ function buildPickTraces(clouds) {
         size: PICK_MARKER_SIZE,
         opacity: 0,
         color: "rgba(0, 0, 0, 0)",
+      },
+      selected: {
+        marker: {
+          opacity: 0,
+          color: "rgba(0, 0, 0, 0)",
+        },
+      },
+      unselected: {
+        marker: {
+          opacity: 0,
+          color: "rgba(0, 0, 0, 0)",
+        },
       },
     };
   });
