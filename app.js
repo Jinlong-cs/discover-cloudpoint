@@ -1436,8 +1436,8 @@ function buildPickTraces(clouds) {
       meta: { side: cloudMeta.key, kind: "pick" },
       marker: {
         size: PICK_MARKER_SIZE,
-        opacity: 0.01,
-        color: "#ffffff",
+        opacity: 0,
+        color: "rgba(0, 0, 0, 0)",
       },
     };
   });

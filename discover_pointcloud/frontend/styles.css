@@ -218,12 +218,14 @@ button:hover {
 
 .summary-panel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  font-size: 0.82rem;
 }
 
 .selection-panel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  font-size: 0.82rem;
 }
 
 .summary-empty {
@@ -232,23 +234,24 @@ button:hover {
 
 .summary-card,
 .selection-card {
-  padding: 10px;
+  padding: 9px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.02);
+  line-height: 1.35;
 }
 
 .summary-card h3,
 .selection-card h3 {
-  margin: 0 0 8px;
-  font-size: 0.96rem;
+  margin: 0 0 7px;
+  font-size: 0.86rem;
 }
 
 .summary-card dl,
 .selection-card dl {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px 12px;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 5px 8px;
   margin: 0;
 }
 
@@ -257,10 +260,18 @@ button:hover {
   color: var(--muted);
 }
 
+.summary-card dd,
+.selection-card dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
 .selection-card .match-warning {
   margin: 8px 0 0;
   color: var(--warn);
-  font-size: 0.88rem;
+  font-size: 0.8rem;
 }
 
 .message-bar {
