@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "discover-pointcloud"
+version = "0.1.0"
+description = "Point cloud comparison tool for DiscoverStereo experiments"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+authors = [{ name = "DiscoverStereo Contributors" }]
+keywords = ["stereo", "pointcloud", "discoverstereo", "visualization", "qt"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Visualization"
+]
+
+[project.optional-dependencies]
+qt = [
+  "PySide6>=6.7"
+]
+release = [
+  "build>=1.2",
+  "twine>=5.0"
+]
+
+[project.scripts]
+discover-pointcloud = "discover_pointcloud.__main__:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["discover_pointcloud*"]
+
+[tool.setuptools.package-data]
+discover_pointcloud = [
+  "frontend/index.html",
+  "frontend/app.js",
+  "frontend/styles.css",
+  "frontend/vendor/*.js",
+  "frontend/vendor/README.md",
+  "frontend/discover_samples/manifest.json",
+  "frontend/discover_samples/*/*.json"
+]
