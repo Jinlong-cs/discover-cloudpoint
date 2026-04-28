@@ -12,8 +12,8 @@
     <div class="app-shell">
       <aside class="control-panel">
         <header class="panel-section">
-          <h1>Point Cloud Compare</h1>
-          <p>GT 与预测点云上下对比，颜色按视差桶显示。</p>
+          <h1>Discover Point Cloud Compare</h1>
+          <p>GT 与 Prediction 上下对比，颜色按视差桶显示，视角同步旋转/缩放。</p>
         </header>
 
         <section class="panel-section">
@@ -38,6 +38,9 @@
           <div id="selectionPanel" class="selection-panel">
             <div class="summary-empty">点击上方或下方点云中的一个点，查看同像素 GT / Prediction 差异。</div>
           </div>
+          <p class="hint compact-hint">
+            点击命中区已加宽；若提示未匹配，可提高“最大点数 / 云”后更新视图。
+          </p>
         </section>
 
         <section class="panel-section">
@@ -110,6 +113,7 @@
             </label>
           </div>
           <p class="hint">
+            大 PLY 会按“最大点数 / 云”抽样解析，状态栏会显示原始点数、显示点数和抽样步长。
             默认值来自 <code>StereoEstimation/DiscoverStereo/*/calib.txt</code>；
             若文件中没有 <code>disp</code> / <code>disparity</code> 字段，则用
             <code>disp = fx * baseline / z</code> 回推。
@@ -158,9 +162,9 @@
         <section class="panel-section">
           <h2>支持格式</h2>
           <ul class="compact-list">
-            <li><code>.ply</code>：目前支持 <code>ascii</code> PLY。</li>
-            <li><code>.json</code>：支持 <code>{points:[[x,y,z,disp], ...]}</code>。</li>
-            <li><code>.json</code>：也支持 <code>{points:[{x,y,z,disp}, ...]}</code>。</li>
+            <li><code>.ply</code>：支持 <code>ascii</code> 与 <code>binary_little_endian</code>。</li>
+            <li><code>.json</code>：支持 <code>{points:[[x,y,z,disp,u,v], ...]}</code>。</li>
+            <li><code>.json</code>：也支持 <code>{points:[{x,y,z,disp,u,v}, ...]}</code>。</li>
           </ul>
         </section>
       </aside>

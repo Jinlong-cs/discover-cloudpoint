@@ -44,12 +44,15 @@ code {
 
 .app-shell {
   display: grid;
-  grid-template-columns: 420px minmax(640px, 1fr);
+  grid-template-columns: 400px minmax(640px, 1fr);
   min-height: 100vh;
 }
 
 .control-panel {
-  padding: 18px;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  padding: 14px;
   border-right: 1px solid var(--border);
   background: linear-gradient(180deg, var(--panel), var(--panel-2));
   overflow-y: auto;
@@ -62,8 +65,8 @@ code {
 }
 
 .panel-section {
-  padding: 14px;
-  margin-bottom: 14px;
+  padding: 12px;
+  margin-bottom: 12px;
   border: 1px solid var(--border);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.02);
@@ -85,8 +88,13 @@ code {
 .panel-section p,
 .panel-section li,
 .hint {
+  margin: 9px 0 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.compact-hint {
+  font-size: 0.8rem;
 }
 
 .field-grid {
@@ -175,6 +183,7 @@ button:hover {
   margin-top: 8px;
   font-size: 0.88rem;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .checkbox-field {
@@ -237,7 +246,7 @@ button:hover {
   padding: 9px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(96, 165, 250, 0.06);
   line-height: 1.35;
 }
 
@@ -277,7 +286,9 @@ button:hover {
 .message-bar {
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--muted);
+  font-size: 0.92rem;
 }
 
 .plot-shell {
@@ -306,6 +317,8 @@ button:hover {
   }
 
   .control-panel {
+    position: static;
+    max-height: none;
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }

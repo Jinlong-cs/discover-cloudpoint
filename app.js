@@ -24,8 +24,9 @@ const DEFAULT_DISCOVER_CAMERA = {
 
 const SAMPLE_MANIFEST_URL = "./discover_samples/manifest.json";
 const MARKER_SIZE_SCALE = 0.6;
-const PICK_MARKER_SIZE = 6;
+const PICK_MARKER_SIZE = 9;
 const PIXEL_MATCH_TOLERANCE = 2.0;
+const LARGE_FILE_WARN_BYTES = 80 * 1024 * 1024;
 const TEXT_DECODER = new TextDecoder("utf-8");
 const isDesktopApp = Boolean(window.pointCloudDesktop);
 
@@ -429,14 +430,29 @@ async function readTextAsset(assetPath) {
 
 async function loadCloudFromLocalFile(file, side) {
   try {
+    state.selection = null;
+    updateSideStatus(side, `读取 ${file.name} (${formatBytes(file.size)})...`);
     setMessage(`读取 ${file.name} 中。`, "info");
+    await waitForPaint();
     const source = await readLocalFileSource(file);
-    state.clouds[side] = buildCloudState({
+
+    updateSideStatus(side, `解析 ${file.name}...`);
+    setMessage(
+      file.size >= LARGE_FILE_WARN_BYTES
+        ? `解析大文件 ${file.name} 中，会按“最大点数 / 云”抽样显示。`
+        : `解析 ${file.name} 中。`,
+      file.size >= LARGE_FILE_WARN_BYTES ? "warn" : "info"
+    );
+    await waitForPaint();
+
+    const startedAt = performance.now();
+    const cloud = buildCloudState({
       name: file.name,
       source,
       sourceType: "file",
       side,
     });
+    state.clouds[side] = cloud;
     if (side === "left" && !elements.leftLabelInput.value.trim()) {
       elements.leftLabelInput.value = file.name;
       state.labels.left = file.name;
@@ -447,7 +463,10 @@ async function loadCloudFromLocalFile(file, side) {
     }
     updateStatus(side);
     renderIfReady();
-    setMessage(`${file.name} 已加载。`, "ok");
+    setMessage(
+      `${file.name} 已加载：显示 ${cloud.pointCount}/${cloud.rawCount} 点，用时 ${formatDuration(performance.now() - startedAt)}。`,
+      "ok"
+    );
   } catch (error) {
     console.error(error);
     updateSideStatus(side, `加载失败：${error.message}`);
@@ -463,7 +482,7 @@ async function readLocalFileSource(file) {
   return { text: await file.text() };
 }
 
-function parseAsciiPly(text) {
+function parseAsciiPly(text, maxPoints = Infinity) {
   const lines = text.replace(/\r/g, "").split("\n");
   if (lines[0]?.trim() !== "ply") {
     throw new Error("PLY 头缺失");
@@ -515,10 +534,12 @@ function parseAsciiPly(text) {
   const disp = [];
   const u = [];
   const v = [];
+  const sourceIndex = [];
   const uField = firstExistingProperty(propertyIndex, ["u", "pixel_x", "px", "col", "column"]);
   const vField = firstExistingProperty(propertyIndex, ["v", "pixel_y", "py", "row", "line"]);
+  const sampleStep = computeSampleStep(vertexCount, maxPoints);
 
-  for (let index = 0; index < vertexCount; index += 1) {
+  for (let index = 0; index < vertexCount; index += sampleStep) {
     const line = lines[headerEnd + 1 + index];
     if (!line) {
       continue;
@@ -530,12 +551,13 @@ function parseAsciiPly(text) {
     disp.push(dispField ? Number(values[propertyIndex[dispField]]) : Number.NaN);
     u.push(uField ? Number(values[propertyIndex[uField]]) : Number.NaN);
     v.push(vField ? Number(values[propertyIndex[vField]]) : Number.NaN);
+    sourceIndex.push(index);
   }
 
-  return { x, y, z, disp, u, v };
+  return { x, y, z, disp, u, v, sourceIndex, rawCount: vertexCount, sampleStep };
 }
 
-function parsePlyBuffer(arrayBuffer) {
+function parsePlyBuffer(arrayBuffer, maxPoints = Infinity) {
   const bytes = new Uint8Array(arrayBuffer);
   const headerEndToken = "end_header";
   const headerEndIndex = findAsciiToken(bytes, headerEndToken);
@@ -555,10 +577,10 @@ function parsePlyBuffer(arrayBuffer) {
   const header = parsePlyHeader(headerText);
 
   if (header.format === "ascii") {
-    return parseAsciiPly(TEXT_DECODER.decode(bytes));
+    return parseAsciiPly(TEXT_DECODER.decode(bytes), maxPoints);
   }
   if (header.format === "binary_little_endian") {
-    return parseBinaryLittleEndianPly(arrayBuffer, dataStart, header);
+    return parseBinaryLittleEndianPly(arrayBuffer, dataStart, header, maxPoints);
   }
   if (header.format === "binary_big_endian") {
     throw new Error("暂不支持 binary_big_endian PLY，请先转换成 binary_little_endian 或 ascii");
@@ -630,7 +652,7 @@ function parsePlyHeader(headerText) {
   return { format, vertexCount, vertexProperties, propertyIndex };
 }
 
-function parseBinaryLittleEndianPly(arrayBuffer, dataStart, header) {
+function parseBinaryLittleEndianPly(arrayBuffer, dataStart, header, maxPoints = Infinity) {
   const view = new DataView(arrayBuffer);
   const propertyReaders = header.vertexProperties.map((property) => {
     const reader = PLY_BINARY_READERS[property.type];
@@ -651,6 +673,7 @@ function parseBinaryLittleEndianPly(arrayBuffer, dataStart, header) {
   const disp = [];
   const u = [];
   const v = [];
+  const sourceIndex = [];
   const dispField = header.propertyIndex.disp !== undefined
     ? "disp"
     : header.propertyIndex.disparity !== undefined
@@ -659,8 +682,9 @@ function parseBinaryLittleEndianPly(arrayBuffer, dataStart, header) {
   const uField = firstExistingProperty(header.propertyIndex, ["u", "pixel_x", "px", "col", "column"]);
   const vField = firstExistingProperty(header.propertyIndex, ["v", "pixel_y", "py", "row", "line"]);
 
-  let offset = dataStart;
-  for (let vertexIndex = 0; vertexIndex < header.vertexCount; vertexIndex += 1) {
+  const sampleStep = computeSampleStep(header.vertexCount, maxPoints);
+  for (let vertexIndex = 0; vertexIndex < header.vertexCount; vertexIndex += sampleStep) {
+    let offset = dataStart + vertexIndex * vertexStride;
     const values = [];
     for (const reader of propertyReaders) {
       values.push(reader.read(view, offset));
@@ -673,13 +697,22 @@ function parseBinaryLittleEndianPly(arrayBuffer, dataStart, header) {
     disp.push(dispField ? Number(values[header.propertyIndex[dispField]]) : Number.NaN);
     u.push(uField ? Number(values[header.propertyIndex[uField]]) : Number.NaN);
     v.push(vField ? Number(values[header.propertyIndex[vField]]) : Number.NaN);
+    sourceIndex.push(vertexIndex);
   }
 
-  return { x, y, z, disp, u, v };
+  return { x, y, z, disp, u, v, sourceIndex, rawCount: header.vertexCount, sampleStep };
 }
 
 function firstExistingProperty(propertyIndex, candidates) {
   return candidates.find((name) => propertyIndex[name] !== undefined) || null;
+}
+
+function computeSampleStep(rawCount, maxPoints) {
+  const limit = Number(maxPoints);
+  if (!Number.isFinite(limit) || limit <= 0 || rawCount <= limit) {
+    return 1;
+  }
+  return Math.ceil(rawCount / limit);
 }
 
 const PLY_BINARY_READERS = {
@@ -761,6 +794,8 @@ function parseJsonCloud(text) {
 
 function normalizeCloud(parsed, { fx, fy, cx, cy, baseline, maxPoints }) {
   const pointCount = parsed.x.length;
+  const rawCount = parsed.rawCount ?? pointCount;
+  const sourceSampleStep = parsed.sampleStep ?? 1;
   const step = pointCount > maxPoints ? Math.ceil(pointCount / maxPoints) : 1;
   const bucketed = Object.fromEntries(
     [...DISP_BUCKETS, OVERFLOW_BUCKET].map((bucket) => [
@@ -817,13 +852,14 @@ function normalizeCloud(parsed, { fx, fy, cx, cy, baseline, maxPoints }) {
       v = (fy * y) / z + cy;
     }
 
-    const point = { x, y, z, disp, u, v, sourceIndex: index };
+    const sourceIndex = parsed.sourceIndex?.[index] ?? index;
+    const point = { x, y, z, disp, u, v, sourceIndex };
     points.push(point);
     if (Number.isFinite(u) && Number.isFinite(v)) {
       const key = pixelKey(u, v);
-      if (!pixelLookup.has(key)) {
-        pixelLookup.set(key, point);
-      }
+      const candidates = pixelLookup.get(key) || [];
+      candidates.push(point);
+      pixelLookup.set(key, candidates);
     }
 
     const bucket = findBucket(disp);
@@ -833,7 +869,7 @@ function normalizeCloud(parsed, { fx, fy, cx, cy, baseline, maxPoints }) {
     bucketed[bucket.key].disp.push(disp);
     bucketed[bucket.key].u.push(u);
     bucketed[bucket.key].v.push(v);
-    bucketed[bucket.key].sourceIndex.push(index);
+    bucketed[bucket.key].sourceIndex.push(sourceIndex);
     bucketed[bucket.key].count += 1;
 
     bounds.xMin = Math.min(bounds.xMin, x);
@@ -864,6 +900,8 @@ function normalizeCloud(parsed, { fx, fy, cx, cy, baseline, maxPoints }) {
 
   return {
     dispMode,
+    rawCount,
+    sampleStep: sourceSampleStep * step,
     bucketed,
     points,
     pixelLookup,
@@ -898,7 +936,7 @@ function updateStatus(side) {
       : "文件+回推";
   updateSideStatus(
     side,
-    `${cloud.name} | ${cloud.pointCount}/${cloud.rawCount} 点 | ${modeLabel}`
+    `${cloud.name} | ${cloud.pointCount}/${cloud.rawCount} 点${cloud.sampleStep > 1 ? ` | ${cloud.sampleStep}x 抽样` : ""} | ${modeLabel}`
   );
 }
 
@@ -951,9 +989,9 @@ function buildCloudState({ name, source, text, sourceType, side }) {
   let parsed;
   if (ext === "ply") {
     if (normalizedSource.arrayBuffer) {
-      parsed = parsePlyBuffer(normalizedSource.arrayBuffer);
+      parsed = parsePlyBuffer(normalizedSource.arrayBuffer, state.maxPoints);
     } else {
-      parsed = parseAsciiPly(normalizedSource.text);
+      parsed = parseAsciiPly(normalizedSource.text, state.maxPoints);
     }
   } else if (ext === "json") {
     parsed = parseJsonCloud(normalizedSource.text);
@@ -968,7 +1006,8 @@ function buildCloudState({ name, source, text, sourceType, side }) {
     side,
     sourceType,
     name,
-    rawCount: parsed.x.length,
+    rawCount: normalized.rawCount,
+    sampleStep: normalized.sampleStep,
     dispMode: normalized.dispMode,
     bucketed: normalized.bucketed,
     points: normalized.points,
@@ -1300,7 +1339,9 @@ function updateSummary() {
         <h3>${escapeHtml(title)}</h3>
         <dl>
           <dt>文件</dt><dd>${escapeHtml(cloud.name)}</dd>
-          <dt>显示点数</dt><dd>${cloud.pointCount}</dd>
+          <dt>点数</dt><dd>${cloud.pointCount} / ${cloud.rawCount}</dd>
+          <dt>采样</dt><dd>${cloud.sampleStep > 1 ? `每 ${cloud.sampleStep} 点取 1 点` : "全量显示"}</dd>
+          <dt>像素索引</dt><dd>${cloud.pixelLookup.size} 个像素</dd>
           <dt>视差来源</dt><dd>${modeLabel}</dd>
           <dt>深度均值</dt><dd>${formatNumber(cloud.depthStats.mean)} m</dd>
           <dt>深度范围</dt><dd>${formatNumber(cloud.depthStats.min)} ~ ${formatNumber(cloud.depthStats.max)} m</dd>
@@ -1332,11 +1373,12 @@ function selectPoint(pointData) {
     sourcePoint,
     targetPoint: match?.point || null,
     pixelDistance: match?.pixelDistance ?? Number.NaN,
+    matchType: match?.matchType || null,
   };
   renderIfReady();
   setMessage(
     match
-      ? `已标记同像素点，像素距离 ${formatNumber(match.pixelDistance)} px。`
+      ? `已标记${match.matchType}，像素距离 ${formatNumber(match.pixelDistance)} px。`
       : "已标记当前点，但另一侧没有可匹配像素。",
     match ? "ok" : "warn"
   );
@@ -1347,20 +1389,57 @@ function findCorrespondingPoint(sourcePoint, targetCloud) {
     return null;
   }
 
-  const exactMatch = targetCloud.pixelLookup.get(pixelKey(sourcePoint.u, sourcePoint.v));
+  const exactMatch = chooseBestPixelCandidate(
+    sourcePoint,
+    targetCloud.pixelLookup.get(pixelKey(sourcePoint.u, sourcePoint.v)) || []
+  );
   if (exactMatch) {
-    return { point: exactMatch, pixelDistance: pixelDistance(sourcePoint, exactMatch) };
+    return {
+      point: exactMatch.point,
+      pixelDistance: exactMatch.pixelDistance,
+      matchType: exactMatch.pixelDistance <= 0.25 ? "同像素点" : "同一取整像素点",
+    };
   }
 
   let bestPoint = null;
   let bestDistance = Infinity;
-  targetCloud.points.forEach((point) => {
+  let bestDepthDistance = Infinity;
+  for (const point of targetCloud.points) {
     const distance = pixelDistance(sourcePoint, point);
-    if (distance < bestDistance) {
+    const depthDistance = Math.abs((sourcePoint.z ?? 0) - (point.z ?? 0));
+    if (
+      distance < bestDistance - Number.EPSILON ||
+      (Math.abs(distance - bestDistance) <= Number.EPSILON && depthDistance < bestDepthDistance)
+    ) {
       bestDistance = distance;
+      bestDepthDistance = depthDistance;
       bestPoint = point;
     }
-  });
+  }
+
+  if (!bestPoint || bestDistance > PIXEL_MATCH_TOLERANCE) {
+    return null;
+  }
+  return { point: bestPoint, pixelDistance: bestDistance, matchType: "2px 内最近投影点" };
+}
+
+function chooseBestPixelCandidate(sourcePoint, candidates) {
+  let bestPoint = null;
+  let bestDistance = Infinity;
+  let bestDepthDistance = Infinity;
+
+  for (const point of candidates) {
+    const distance = pixelDistance(sourcePoint, point);
+    const depthDistance = Math.abs((sourcePoint.z ?? 0) - (point.z ?? 0));
+    if (
+      distance < bestDistance - Number.EPSILON ||
+      (Math.abs(distance - bestDistance) <= Number.EPSILON && depthDistance < bestDepthDistance)
+    ) {
+      bestPoint = point;
+      bestDistance = distance;
+      bestDepthDistance = depthDistance;
+    }
+  }
 
   if (!bestPoint || bestDistance > PIXEL_MATCH_TOLERANCE) {
     return null;
@@ -1394,11 +1473,12 @@ function buildSelectionTraces() {
     if (!point) {
       return;
     }
+    const isSource = side === state.selection.sourceSide;
     traces.push({
       type: "scatter3d",
       mode: "markers",
       scene: sideToScene[side],
-      name: side === "left" ? "Selected GT" : "Selected Prediction",
+      name: `${side === "left" ? "Selected GT" : "Selected Prediction"} ${isSource ? "source" : "match"}`,
       showlegend: false,
       hovertemplate:
         `${side === "left" ? state.labels.left : state.labels.right}<br>x=%{x:.3f}<br>y=%{y:.3f}<br>z=%{z:.3f}<br>disp=%{customdata[0]:.2f}<br>pixel=(%{customdata[1]:.1f}, %{customdata[2]:.1f})<extra>selected</extra>`,
@@ -1409,7 +1489,7 @@ function buildSelectionTraces() {
       meta: { side, kind: "selection" },
       marker: {
         size: Math.max(4, scaledMarkerSize() * 5),
-        color: "#ffffff",
+        color: isSource ? "#facc15" : "#22d3ee",
         opacity: 1,
         line: { color: "#0f172a", width: 4 },
       },
@@ -1507,6 +1587,7 @@ function updateSelectionPanel() {
     <div class="selection-card">
       <h3>同像素对比</h3>
       <dl>
+        <dt>匹配方式</dt><dd>${state.selection.matchType || "同像素点"}</dd>
         <dt>GT 像素</dt><dd>${formatPixel(gtPoint)}</dd>
         <dt>Pred 像素</dt><dd>${formatPixel(predPoint)}</dd>
         <dt>像素距离</dt><dd>${formatNumber(state.selection.pixelDistance)} px</dd>
@@ -1547,6 +1628,38 @@ function formatVector(point) {
     return "--";
   }
   return `${formatNumber(point.x)}, ${formatNumber(point.y)}, ${formatNumber(point.z)} m`;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) {
+    return "--";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function formatDuration(milliseconds) {
+  if (!Number.isFinite(milliseconds)) {
+    return "--";
+  }
+  if (milliseconds < 1000) {
+    return `${Math.round(milliseconds)} ms`;
+  }
+  return `${(milliseconds / 1000).toFixed(1)} s`;
+}
+
+function waitForPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      setTimeout(resolve, 0);
+    });
+  });
 }
 
 function escapeHtml(text) {
