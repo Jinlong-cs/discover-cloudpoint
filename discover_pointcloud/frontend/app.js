@@ -24,6 +24,7 @@ const DEFAULT_DISCOVER_CAMERA = {
 
 const SAMPLE_MANIFEST_URL = "./discover_samples/manifest.json";
 const MARKER_SIZE_SCALE = 0.6;
+const POINT_SELECTION_ENABLED = false;
 const PICK_MARKER_SIZE = 9;
 const PIXEL_MATCH_TOLERANCE = 2.0;
 const LARGE_FILE_WARN_BYTES = 80 * 1024 * 1024;
@@ -1111,7 +1112,9 @@ function renderPlot() {
     });
   });
 
-  traces.push(...buildPickTraces(clouds));
+  if (POINT_SELECTION_ENABLED) {
+    traces.push(...buildPickTraces(clouds));
+  }
   const layout = buildLayout({
     sceneBounds: mergeBounds([state.clouds.left.bounds, state.clouds.right.bounds]),
   });
@@ -1123,7 +1126,10 @@ function renderPlot() {
   }).then(() => {
     state.selectionTraceCount = 0;
     bindPlotSync();
-    return updateSelectionOverlay();
+    if (POINT_SELECTION_ENABLED) {
+      return updateSelectionOverlay();
+    }
+    return undefined;
   });
 }
 
@@ -1275,6 +1281,11 @@ function bindPlotSync() {
   elements.plot.on?.("plotly_relayout", state.plotSyncHandler);
 
   removePlotListener("plotly_click", state.plotClickHandler);
+  state.plotClickHandler = null;
+  if (!POINT_SELECTION_ENABLED) {
+    return;
+  }
+
   state.plotClickHandler = (eventData) => {
     const pointData = eventData?.points?.[0];
     if (!pointData || !["cloud", "pick"].includes(pointData.data?.meta?.kind)) {
@@ -1614,6 +1625,11 @@ function collectPickData(cloud) {
 }
 
 function updateSelectionPanel() {
+  if (!POINT_SELECTION_ENABLED) {
+    elements.selectionPanel.innerHTML = '<div class="summary-empty">点选像素对比已暂时关闭，避免大点云点击后卡死。</div>';
+    return;
+  }
+
   if (!state.selection) {
     elements.selectionPanel.innerHTML = '<div class="summary-empty">点击上方或下方点云中的一个点，查看同像素 GT / Prediction 差异。</div>';
     return;
