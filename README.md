@@ -170,33 +170,6 @@ python3 -m http.server 8000
 
 `http://localhost:8000/pointcloud_compare_tool/`
 
-## Electron 模式
-
-Electron 外壳目前保留为可选路线，原因是已有源码和构建配置仍可用于生成本地 `.app`。
-当前推荐主线仍是 `pip install -e .` 后运行 `discover-pointcloud`。
-
-首次安装依赖：
-
-```bash
-npm install
-```
-
-直接启动桌面应用：
-
-```bash
-npm run app
-```
-
-构建本地可双击启动的 macOS `.app`：
-
-```bash
-npm run dist:mac
-```
-
-生成目录默认在：
-
-- `dist/mac-arm64/Discover PointCloud.app`
-
 ## 验证
 
 语法检查：
@@ -218,16 +191,3 @@ CLI 与资源 smoke check：
 discover-pointcloud --help
 python3 scripts/smoke_check.py
 ```
-
-## 发布清理
-
-不要提交这些本地生成物：
-
-- `.venv*`
-- `node_modules/`
-- `build/`
-- `dist/`
-- `*.egg-info/`
-- `__pycache__/`
-
-`LICENSE` 尚未选择；正式开源前需要由项目所有者决定许可证。
