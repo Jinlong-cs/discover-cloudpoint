@@ -13,7 +13,7 @@
       <aside class="control-panel">
         <header class="panel-section">
           <h1>Discover Point Cloud Compare</h1>
-          <p>GT 与 Prediction 上下对比，颜色按视差桶显示，视角同步旋转/缩放。</p>
+          <p>三路点云上下对比，颜色按视差桶显示，视角同步旋转/缩放。</p>
         </header>
 
         <section class="panel-section">
@@ -28,11 +28,11 @@
 
         <section class="panel-section">
           <h2>点云输入</h2>
-          <div class="field-grid two-columns">
+          <div class="field-grid cloud-input-grid">
             <div class="cloud-input-block">
-              <div class="block-title">上方</div>
+              <div class="block-title">窗口 1 · 上方</div>
               <label class="field">
-                <span>标签</span>
+                <span>窗口名称</span>
                 <input id="leftLabelInput" type="text" value="GT" />
               </label>
               <label class="field">
@@ -46,17 +46,33 @@
             </div>
 
             <div class="cloud-input-block">
-              <div class="block-title">下方</div>
+              <div class="block-title">窗口 2 · 中间</div>
               <label class="field">
-                <span>标签</span>
-                <input id="rightLabelInput" type="text" value="Prediction" />
+                <span>窗口名称</span>
+                <input id="middleLabelInput" type="text" value="Prediction 1" />
+              </label>
+              <label class="field">
+                <span>文件</span>
+                <input id="middleFileInput" type="file" accept=".ply,.json" />
+              </label>
+              <div id="middleDropZone" class="drop-zone">
+                拖拽第二路点云到这里
+              </div>
+              <div id="middleStatus" class="status-line">未加载</div>
+            </div>
+
+            <div class="cloud-input-block">
+              <div class="block-title">窗口 3 · 下方</div>
+              <label class="field">
+                <span>窗口名称</span>
+                <input id="rightLabelInput" type="text" value="Prediction 2" />
               </label>
               <label class="field">
                 <span>文件</span>
                 <input id="rightFileInput" type="file" accept=".ply,.json" />
               </label>
               <div id="rightDropZone" class="drop-zone">
-                拖拽预测点云到这里
+                拖拽第三路点云到这里
               </div>
               <div id="rightStatus" class="status-line">未加载</div>
             </div>
@@ -138,7 +154,7 @@
         <section class="panel-section">
           <h2>统计</h2>
           <div id="summaryPanel" class="summary-panel">
-            <div class="summary-empty">加载两组点云后显示统计。</div>
+            <div class="summary-empty">加载三组点云后显示统计。</div>
           </div>
         </section>
 

@@ -106,6 +106,10 @@ code {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.cloud-input-grid {
+  grid-template-columns: 1fr;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -293,14 +297,14 @@ button:hover {
 
 .plot-shell {
   flex: 1;
-  min-height: 960px;
+  min-height: 1260px;
   padding: 12px;
 }
 
 .plot-canvas {
   width: 100%;
-  height: calc(100vh - 70px);
-  min-height: 960px;
+  height: max(calc(100vh - 70px), 1260px);
+  min-height: 1260px;
   border-radius: 14px;
   overflow: hidden;
   border: 1px solid var(--border);
@@ -324,7 +328,7 @@ button:hover {
   }
 
   .plot-canvas {
-    height: 980px;
+    height: 1260px;
   }
 }
 

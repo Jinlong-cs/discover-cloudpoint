@@ -1,13 +1,13 @@
 # Discover PointCloud
 
-面向 DiscoverStereo `GT vs Prediction` 的点云对比工具。目标使用方式是：
+面向 DiscoverStereo 多路点云对比的可视化工具。目标使用方式是：
 从 GitHub clone 仓库后，在仓库目录执行 `pip install -e .`，然后直接运行
 `discover-pointcloud`。
 
 ## 功能
 
-- 上下显示两组点云，保留同步视角交互
-- Plotly 3D 交互，双视图相机同步
+- 上中下显示三组点云，每个窗口可自定义显示名称
+- Plotly 3D 交互，三视图相机同步
 - 固定视差桶着色：
   - `0-16`
   - `16-32`
@@ -40,7 +40,7 @@ discover-pointcloud
 本地已有源码目录时：
 
 ```bash
-cd pointcloud_compare_tool
+cd discover-cloudpoint
 python -m pip install --upgrade pip
 python -m pip install -e .
 discover-pointcloud

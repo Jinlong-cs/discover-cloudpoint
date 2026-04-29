@@ -28,16 +28,15 @@ const PICK_MARKER_SIZE = 9;
 const PIXEL_MATCH_TOLERANCE = 2.0;
 const LARGE_FILE_WARN_BYTES = 80 * 1024 * 1024;
 const TEXT_DECODER = new TextDecoder("utf-8");
+const VIEW_SLOTS = [
+  { key: "left", scene: "scene", positionLabel: "上方", defaultLabel: "GT" },
+  { key: "middle", scene: "scene2", positionLabel: "中间", defaultLabel: "Prediction 1" },
+  { key: "right", scene: "scene3", positionLabel: "下方", defaultLabel: "Prediction 2" },
+];
 
 const state = {
-  clouds: {
-    left: null,
-    right: null,
-  },
-  labels: {
-    left: "GT",
-    right: "Prediction",
-  },
+  clouds: Object.fromEntries(VIEW_SLOTS.map((slot) => [slot.key, null])),
+  labels: Object.fromEntries(VIEW_SLOTS.map((slot) => [slot.key, slot.defaultLabel])),
   camera: {
     eye: { x: 0.0, y: -2.2, z: 0.9 },
     up: { x: 0, y: 0, z: 1 },
@@ -66,12 +65,16 @@ const elements = {
   summaryPanel: document.getElementById("summaryPanel"),
   selectionPanel: document.getElementById("selectionPanel"),
   leftFileInput: document.getElementById("leftFileInput"),
+  middleFileInput: document.getElementById("middleFileInput"),
   rightFileInput: document.getElementById("rightFileInput"),
   leftLabelInput: document.getElementById("leftLabelInput"),
+  middleLabelInput: document.getElementById("middleLabelInput"),
   rightLabelInput: document.getElementById("rightLabelInput"),
   leftDropZone: document.getElementById("leftDropZone"),
+  middleDropZone: document.getElementById("middleDropZone"),
   rightDropZone: document.getElementById("rightDropZone"),
   leftStatus: document.getElementById("leftStatus"),
+  middleStatus: document.getElementById("middleStatus"),
   rightStatus: document.getElementById("rightStatus"),
   fxInput: document.getElementById("fxInput"),
   fyInput: document.getElementById("fyInput"),
@@ -131,7 +134,7 @@ function buildBucketControls() {
     const count = document.createElement("span");
     count.className = "bucket-count";
     count.id = `bucket-count-${bucket.key}`;
-    count.textContent = "-- / --";
+    count.textContent = VIEW_SLOTS.map(() => "--").join(" / ");
 
     row.append(checkbox, swatch, text, count);
     elements.bucketControls.appendChild(row);
@@ -139,28 +142,18 @@ function buildBucketControls() {
 }
 
 function bindEvents() {
-  elements.leftFileInput.addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      loadCloudFromLocalFile(file, "left");
-    }
-  });
+  VIEW_SLOTS.forEach((slot) => {
+    elements[`${slot.key}FileInput`].addEventListener("change", (event) => {
+      const file = event.target.files?.[0];
+      if (file) {
+        loadCloudFromLocalFile(file, slot.key);
+      }
+    });
 
-  elements.rightFileInput.addEventListener("change", (event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      loadCloudFromLocalFile(file, "right");
-    }
-  });
-
-  elements.leftLabelInput.addEventListener("input", () => {
-    state.labels.left = elements.leftLabelInput.value || "GT";
-    renderIfReady();
-  });
-
-  elements.rightLabelInput.addEventListener("input", () => {
-    state.labels.right = elements.rightLabelInput.value || "Prediction";
-    renderIfReady();
+    elements[`${slot.key}LabelInput`].addEventListener("input", () => {
+      state.labels[slot.key] = elements[`${slot.key}LabelInput`].value || slot.defaultLabel;
+      renderIfReady();
+    });
   });
 
   elements.pointSizeInput.addEventListener("input", () => {
@@ -182,7 +175,7 @@ function bindEvents() {
 
   elements.maxPointsInput.addEventListener("change", () => {
     state.maxPoints = Math.max(1000, Number(elements.maxPointsInput.value) || 40000);
-    if (state.clouds.left || state.clouds.right) {
+    if (loadedClouds().length) {
       reloadCloudsWithCurrentSettings();
     }
   });
@@ -236,8 +229,9 @@ function bindEvents() {
     await exportScreenshot();
   });
 
-  bindDropZone(elements.leftDropZone, "left");
-  bindDropZone(elements.rightDropZone, "right");
+  VIEW_SLOTS.forEach((slot) => {
+    bindDropZone(elements[`${slot.key}DropZone`], slot.key);
+  });
 }
 
 function bindDropZone(dropZone, side) {
@@ -313,13 +307,10 @@ async function loadCloudFromLocalFile(file, side) {
       side,
     });
     state.clouds[side] = cloud;
-    if (side === "left" && !elements.leftLabelInput.value.trim()) {
-      elements.leftLabelInput.value = file.name;
-      state.labels.left = file.name;
-    }
-    if (side === "right" && !elements.rightLabelInput.value.trim()) {
-      elements.rightLabelInput.value = file.name;
-      state.labels.right = file.name;
+    const labelInput = elements[`${side}LabelInput`];
+    if (labelInput && !labelInput.value.trim()) {
+      labelInput.value = file.name;
+      state.labels[side] = file.name;
     }
     updateStatus(side);
     renderIfReady();
@@ -801,33 +792,23 @@ function updateStatus(side) {
 }
 
 function updateSideStatus(side, text) {
-  if (side === "left") {
-    elements.leftStatus.textContent = text;
-  } else {
-    elements.rightStatus.textContent = text;
-  }
+  elements[`${side}Status`].textContent = text;
 }
 
 function reloadCloudsWithCurrentSettings() {
   try {
-    if (state.clouds.left) {
-      state.clouds.left = buildCloudState({
-        name: state.clouds.left.name,
-        source: serializeCloud(state.clouds.left),
-        sourceType: state.clouds.left.sourceType,
-        side: "left",
-      });
-    }
-    if (state.clouds.right) {
-      state.clouds.right = buildCloudState({
-        name: state.clouds.right.name,
-        source: serializeCloud(state.clouds.right),
-        sourceType: state.clouds.right.sourceType,
-        side: "right",
-      });
-    }
-    updateStatus("left");
-    updateStatus("right");
+    VIEW_SLOTS.forEach((slot) => {
+      const cloud = state.clouds[slot.key];
+      if (cloud) {
+        state.clouds[slot.key] = buildCloudState({
+          name: cloud.name,
+          source: serializeCloud(cloud),
+          sourceType: cloud.sourceType,
+          side: slot.key,
+        });
+      }
+      updateStatus(slot.key);
+    });
     renderIfReady();
     setMessage("视图已按当前参数刷新。", "ok");
   } catch (error) {
@@ -884,7 +865,7 @@ function buildCloudState({ name, source, text, sourceType, side }) {
 }
 
 function renderIfReady() {
-  if (!state.clouds.left || !state.clouds.right) {
+  if (!allCloudsLoaded()) {
     renderEmptyPlot();
     updateSummary();
     updateSelectionPanel();
@@ -894,6 +875,14 @@ function renderIfReady() {
   updateSummary();
   updateBucketCounts();
   updateSelectionPanel();
+}
+
+function allCloudsLoaded() {
+  return VIEW_SLOTS.every((slot) => Boolean(state.clouds[slot.key]));
+}
+
+function loadedClouds() {
+  return VIEW_SLOTS.map((slot) => state.clouds[slot.key]).filter(Boolean);
 }
 
 function renderEmptyPlot() {
@@ -923,11 +912,12 @@ function defaultBounds() {
 
 function renderPlot() {
   const traces = [];
-  const scenes = ["scene", "scene2"];
-  const clouds = [
-    { key: "left", label: state.labels.left, scene: scenes[0], showLegend: true },
-    { key: "right", label: state.labels.right, scene: scenes[1], showLegend: false },
-  ];
+  const clouds = VIEW_SLOTS.map((slot, index) => ({
+    key: slot.key,
+    label: state.labels[slot.key],
+    scene: slot.scene,
+    showLegend: index === 0,
+  }));
 
   clouds.forEach((cloudMeta) => {
     const cloud = state.clouds[cloudMeta.key];
@@ -972,7 +962,7 @@ function renderPlot() {
     traces.push(...buildPickTraces(clouds));
   }
   const layout = buildLayout({
-    sceneBounds: mergeBounds([state.clouds.left.bounds, state.clouds.right.bounds]),
+    sceneBounds: mergeBounds(loadedClouds().map((cloud) => cloud.bounds)),
   });
 
   Plotly.react(elements.plot, traces, layout, {
@@ -1022,12 +1012,12 @@ function buildLayout({ sceneBounds }) {
       xanchor: "center",
     },
     title: {
-      text: "Synchronized Point Cloud Compare · Top / Bottom",
+      text: "Synchronized Point Cloud Compare · Top / Middle / Bottom",
       x: 0.5,
       xanchor: "center",
     },
     scene: {
-      domain: { x: [0.0, 1.0], y: [0.52, 1.0] },
+      domain: { x: [0.0, 1.0], y: [0.68, 1.0] },
       xaxis: { ...axisTemplate, title: "X (m)", range: xRange },
       yaxis: { ...axisTemplate, title: "Y (m)", range: yRange },
       zaxis: { ...axisTemplate, title: "Z / depth (m)", range: zRange },
@@ -1037,7 +1027,17 @@ function buildLayout({ sceneBounds }) {
       annotations: [],
     },
     scene2: {
-      domain: { x: [0.0, 1.0], y: [0.0, 0.48] },
+      domain: { x: [0.0, 1.0], y: [0.34, 0.66] },
+      xaxis: { ...axisTemplate, title: "X (m)", range: xRange },
+      yaxis: { ...axisTemplate, title: "Y (m)", range: yRange },
+      zaxis: { ...axisTemplate, title: "Z / depth (m)", range: zRange },
+      aspectmode: "data",
+      camera: state.camera,
+      dragmode: "turntable",
+      annotations: [],
+    },
+    scene3: {
+      domain: { x: [0.0, 1.0], y: [0.0, 0.32] },
       xaxis: { ...axisTemplate, title: "X (m)", range: xRange },
       yaxis: { ...axisTemplate, title: "Y (m)", range: yRange },
       zaxis: { ...axisTemplate, title: "Z / depth (m)", range: zRange },
@@ -1048,7 +1048,8 @@ function buildLayout({ sceneBounds }) {
     },
     annotations: [
       subplotTitle(state.labels.left, 0.5, 1.01),
-      subplotTitle(state.labels.right, 0.5, 0.49),
+      subplotTitle(state.labels.middle, 0.5, 0.67),
+      subplotTitle(state.labels.right, 0.5, 0.33),
     ],
   };
 }
@@ -1119,17 +1120,17 @@ function bindPlotSync() {
     if (state.syncLocked) {
       return;
     }
-    const camera = eventData["scene.camera"] || eventData["scene2.camera"];
+    const camera = VIEW_SLOTS.map((slot) => eventData[`${slot.scene}.camera`]).find(Boolean);
     if (!camera) {
       return;
     }
 
     state.syncLocked = true;
     state.camera = camera;
-    Plotly.relayout(elements.plot, {
-      "scene.camera": camera,
-      "scene2.camera": camera,
-    }).finally(() => {
+    Plotly.relayout(
+      elements.plot,
+      Object.fromEntries(VIEW_SLOTS.map((slot) => [`${slot.scene}.camera`, camera]))
+    ).finally(() => {
       state.syncLocked = false;
     });
   };
@@ -1164,7 +1165,7 @@ function removePlotListener(eventName, handler) {
 }
 
 function updateMarkerStyle() {
-  if (!state.clouds.left || !state.clouds.right) {
+  if (!allCloudsLoaded()) {
     return;
   }
   renderIfReady();
@@ -1184,28 +1185,24 @@ function updateTheme(themeName) {
 }
 
 function updateBucketCounts() {
-  const left = state.clouds.left;
-  const right = state.clouds.right;
   [...DISP_BUCKETS, OVERFLOW_BUCKET].forEach((bucket) => {
     const element = document.getElementById(`bucket-count-${bucket.key}`);
     if (!element) {
       return;
     }
-    const leftCount = left?.bucketed[bucket.key]?.count ?? 0;
-    const rightCount = right?.bucketed[bucket.key]?.count ?? 0;
-    element.textContent = `${leftCount} / ${rightCount}`;
+    element.textContent = VIEW_SLOTS.map((slot) => state.clouds[slot.key]?.bucketed[bucket.key]?.count ?? 0).join(" / ");
   });
 }
 
 function updateSummary() {
-  if (!state.clouds.left || !state.clouds.right) {
-    elements.summaryPanel.innerHTML = '<div class="summary-empty">加载两组点云后显示统计。</div>';
+  if (!allCloudsLoaded()) {
+    elements.summaryPanel.innerHTML = '<div class="summary-empty">加载三组点云后显示统计。</div>';
     return;
   }
 
-  const cards = ["left", "right"].map((side) => {
-    const cloud = state.clouds[side];
-    const title = side === "left" ? state.labels.left : state.labels.right;
+  const cards = VIEW_SLOTS.map((slot) => {
+    const cloud = state.clouds[slot.key];
+    const title = state.labels[slot.key];
     const modeLabel = cloud.dispMode === "file"
       ? "文件视差"
       : cloud.dispMode === "derived"
@@ -1214,7 +1211,7 @@ function updateSummary() {
 
     return `
       <div class="summary-card">
-        <h3>${escapeHtml(title)}</h3>
+        <h3>${escapeHtml(slot.positionLabel)} · ${escapeHtml(title)}</h3>
         <dl>
           <dt>文件</dt><dd>${escapeHtml(cloud.name)}</dd>
           <dt>点数</dt><dd>${cloud.pointCount} / ${cloud.rawCount}</dd>
@@ -1383,7 +1380,7 @@ function buildSelectionTraces() {
     return [];
   }
   const traces = [];
-  const sideToScene = { left: "scene", right: "scene2" };
+  const sideToScene = Object.fromEntries(VIEW_SLOTS.map((slot) => [slot.key, slot.scene]));
   const sideToPoint = {
     [state.selection.sourceSide]: state.selection.sourcePoint,
     [state.selection.targetSide]: state.selection.targetPoint,
@@ -1394,14 +1391,15 @@ function buildSelectionTraces() {
       return;
     }
     const isSource = side === state.selection.sourceSide;
+    const label = state.labels[side] || side;
     traces.push({
       type: "scatter3d",
       mode: "markers",
       scene: sideToScene[side],
-      name: `${side === "left" ? "Selected GT" : "Selected Prediction"} ${isSource ? "source" : "match"}`,
+      name: `${label} ${isSource ? "source" : "match"}`,
       showlegend: false,
       hovertemplate:
-        `${side === "left" ? state.labels.left : state.labels.right}<br>x=%{x:.3f}<br>y=%{y:.3f}<br>z=%{z:.3f}<br>disp=%{customdata[0]:.2f}<br>pixel=(%{customdata[1]:.1f}, %{customdata[2]:.1f})<extra>selected</extra>`,
+        `${label}<br>x=%{x:.3f}<br>y=%{y:.3f}<br>z=%{z:.3f}<br>disp=%{customdata[0]:.2f}<br>pixel=(%{customdata[1]:.1f}, %{customdata[2]:.1f})<extra>selected</extra>`,
       x: [point.x],
       y: [point.y],
       z: [point.z],
